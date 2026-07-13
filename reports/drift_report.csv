@@ -1,0 +1,8 @@
+feature,psi,psi_verdict,ks_statistic,ks_p_value,kl_divergence,naive_zscore,ref_mean,cur_mean
+hour_of_day,0.1577,Moderate drift - monitor closely,0.1199,0.0,0.0735,0.1301,13.942,13.178
+PULocationID,0.1016,Moderate drift - monitor closely,0.1033,0.0,0.0485,0.1203,165.244,157.439
+DOLocationID,0.0748,No significant drift,0.101,0.0,0.0372,0.1566,162.918,151.991
+passenger_count,0.0666,No significant drift,0.1053,0.0,0.0313,0.1789,1.548,1.342
+fare_amount,0.0625,No significant drift,0.1049,0.0,0.0322,0.1622,12.362,10.584
+trip_distance,0.0198,No significant drift,0.0327,0.0,0.0101,0.0464,2.891,2.717
+is_weekend,0.0114,No significant drift,0.0441,0.0,0.0056,0.1032,0.24,0.196
