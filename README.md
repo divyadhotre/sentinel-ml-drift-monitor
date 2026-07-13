@@ -108,7 +108,7 @@ streamlit run app/streamlit_app.py
 
 <br><br>
 
-![Distribution Explorer Tab](reports/screenshots/distributions.png)
+![Distribution Explorer Tab](reports/screenshots/Exploror.png)
 
 ---
 
