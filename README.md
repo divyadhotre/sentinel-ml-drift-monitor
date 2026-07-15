@@ -1,5 +1,7 @@
 # Sentinel — ML Model Drift Monitor
 
+![Tests](https://github.com/divyadhotre/sentinel-ml-drift-monitor/actions/workflows/tests.yml/badge.svg)
+
 **Detects when a production ML model's input data has silently drifted away from its training distribution, quantifies *what kind* of drift occurred, and flags whether retraining is needed — before it costs the business money.**
 
 Demonstrated on real NYC Yellow Taxi trip data: **January 2020 (pre-pandemic) vs April 2020 (COVID-19 lockdown)** — a genuine, documented 96% collapse in ridership.
