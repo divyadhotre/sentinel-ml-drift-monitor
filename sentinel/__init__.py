@@ -11,6 +11,7 @@ from .core import SentinelMonitor, SentinelResult
 from . import metrics
 from . import concept_drift
 from . import performance
+from . import alerting
 
-__all__ = ["SentinelMonitor", "SentinelResult", "metrics", "concept_drift", "performance"]
+__all__ = ["SentinelMonitor", "SentinelResult", "metrics", "concept_drift", "performance", "alerting"]
 __version__ = "0.1.0"
