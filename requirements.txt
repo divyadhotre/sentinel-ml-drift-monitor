@@ -1,3 +1,4 @@
+
 pandas
 numpy
 scipy
@@ -6,3 +7,5 @@ matplotlib
 seaborn
 shap
 streamlit
+requests
+pyyaml
