@@ -1,16 +1,16 @@
 """
 streamlit_app.py
 
-"Sentinel" -- an ML Model Drift Monitoring dashboard.
+"Sentinel" -- an ML Model Drift Monitoring dashboard, built directly on
+top of the generic sentinel/ package (SentinelMonitor), not a taxi-specific
+wrapper. Works two ways:
 
-Detects when a production model's input data has drifted away from its
-training distribution, quantifies drift per feature (PSI / KS-test /
-KL-divergence), tracks real model performance decay, and renders an
-actionable alert -- including a simulated Slack notification, the way a
-real MLOps monitoring tool would surface this to an engineering team.
+  1. Built-in demo: NYC Taxi Jan 2020 vs Apr 2020 (COVID lockdown) --
+     pre-configured columns, trained model included, for the case study.
 
-Demonstrated on real NYC Yellow Taxi trip data: January 2020 (pre-pandemic)
-vs April 2020 (COVID-19 lockdown) -- a genuine, documented regime change.
+  2. Upload your own CSVs: any two tabular datasets. Feature and target
+     columns are chosen dynamically from whatever columns the two files
+     actually share -- no hardcoded schema, no taxi-specific assumptions.
 
 Run with:
     streamlit run app/streamlit_app.py
@@ -27,8 +27,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-from monitor import run_monitor
-from model import FEATURE_COLUMNS
+from sentinel import SentinelMonitor
 
 st.set_page_config(
     page_title="Sentinel · ML Drift Monitor",
@@ -92,8 +91,6 @@ CUSTOM_CSS = """
     }
     .metric-label { color: #7d8a9c; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .metric-value { color: #eef2f6; font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
-    .metric-delta-up { color: #ff5c5c; font-size: 13px; font-weight: 600; }
-    .metric-delta-down { color: #00e08c; font-size: 13px; font-weight: 600; }
 
     .slack-window {
         background: #1a1d21;
@@ -139,9 +136,7 @@ CUSTOM_CSS = """
     .slack-alert-block.ok { border-left-color: #00e08c; background: rgba(0,224,140,0.08); }
 
     section[data-testid="stSidebar"] .stRadio label { color: #d1d5db; }
-
     div[data-testid="stDataFrame"] { border: 1px solid #1f2733; border-radius: 10px; }
-
     .footer-note { color: #4a5568; font-size: 12px; text-align: center; margin-top: 40px; }
 </style>
 """
@@ -177,9 +172,26 @@ data_source = st.sidebar.radio(
     label_visibility="collapsed",
 )
 
+model = None
+target_column = None
+
 if data_source.startswith("NYC Taxi"):
     train_df = pd.read_csv("data/processed/taxi_training_era.csv")
     current_df = pd.read_csv("data/processed/taxi_current_era.csv")
+
+    feature_columns = [
+        "trip_distance", "passenger_count", "PULocationID",
+        "DOLocationID", "fare_amount", "hour_of_day", "is_weekend",
+    ]
+    target_column = "trip_duration_min"
+
+    model_path = "data/processed/baseline_model.pkl"
+    if os.path.exists(model_path):
+        try:
+            model = joblib.load(model_path)
+        except Exception:
+            model = None
+
     st.sidebar.markdown(
         """
         <div style="background:#10151c; border:1px solid #1f2733; border-radius:8px; padding:12px; margin-top:8px;">
@@ -193,14 +205,40 @@ if data_source.startswith("NYC Taxi"):
         """,
         unsafe_allow_html=True,
     )
+
 else:
     train_file = st.sidebar.file_uploader("Reference (training) CSV", type="csv")
     current_file = st.sidebar.file_uploader("Current CSV", type="csv")
-    if train_file is not None and current_file is not None:
-        train_df = pd.read_csv(train_file)
-        current_df = pd.read_csv(current_file)
-    else:
-        st.info("Upload both CSVs in the sidebar, or switch to the built-in demo.")
+
+    if train_file is None or current_file is None:
+        st.info("Upload both CSVs in the sidebar to continue, or switch to the built-in demo.")
+        st.stop()
+
+    train_df = pd.read_csv(train_file)
+    current_df = pd.read_csv(current_file)
+
+    common_columns = [c for c in train_df.columns if c in current_df.columns]
+    numeric_common = [c for c in common_columns if pd.api.types.is_numeric_dtype(train_df[c])]
+
+    if not numeric_common:
+        st.error("No shared numeric columns found between the two files. Sentinel needs at least one common numeric column to compare.")
+        st.stop()
+
+    st.sidebar.markdown("### Configure Columns")
+    feature_columns = st.sidebar.multiselect(
+        "Feature columns to monitor",
+        options=numeric_common,
+        default=numeric_common[: min(len(numeric_common), 8)],
+    )
+    target_options = ["(none)"] + numeric_common
+    target_choice = st.sidebar.selectbox("Target column (optional -- enables concept drift check)", target_options)
+    target_column = None if target_choice == "(none)" else target_choice
+
+    if target_column in feature_columns:
+        feature_columns = [f for f in feature_columns if f != target_column]
+
+    if not feature_columns:
+        st.warning("Select at least one feature column in the sidebar to run the analysis.")
         st.stop()
 
 st.sidebar.markdown("---")
@@ -217,20 +255,18 @@ st.sidebar.markdown(
 )
 
 # ============================================================================
-# RUN MONITOR
+# RUN SENTINEL (the actual generic package -- same code path for both modes)
 # ============================================================================
-model = None
-model_path = "data/processed/baseline_model.pkl"
-if os.path.exists(model_path):
-    try:
-        model = joblib.load(model_path)
-    except Exception:
-        model = None
+result = SentinelMonitor(
+    reference_df=train_df,
+    current_df=current_df,
+    feature_columns=feature_columns,
+    target_column=target_column,
+    model=model,
+).run()
 
-available_features = [c for c in FEATURE_COLUMNS if c in train_df.columns and c in current_df.columns]
-result = run_monitor(train_df, current_df, model=model, feature_columns=available_features)
-status = result["status"]
-drift_report = result["drift_report"]
+status = result.status
+drift_report = result.drift_report
 n_drifted = (drift_report["psi"] >= 0.10).sum()
 
 # ============================================================================
@@ -247,21 +283,21 @@ with top_col1:
                 <span class="status-pill status-{status}">● {status}</span>
             </div>
             <div style="color:#7d8a9c; font-size:12px; margin-top:10px;">
-                Max PSI: <span style="color:#eef2f6; font-family:'JetBrains Mono',monospace;">{result['max_psi']:.3f}</span>
-                &nbsp;·&nbsp; {n_drifted} of {len(available_features)} features drifted
+                Max PSI: <span style="color:#eef2f6; font-family:'JetBrains Mono',monospace;">{result.max_psi:.3f}</span>
+                &nbsp;·&nbsp; {n_drifted} of {len(feature_columns)} features drifted
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-if result["performance"] is not None:
-    mae = result["performance"]["mae"]
-    r2 = result["performance"]["r2"]
+if result.performance is not None:
+    mae = result.performance["mae"]
+    r2 = result.performance["r2"]
     with top_col2:
         st.markdown(
             f"""<div class="metric-card"><div class="metric-label">Model MAE (current)</div>
-            <div class="metric-value">{mae:.2f}<span style="font-size:14px; color:#7d8a9c;"> min</span></div></div>""",
+            <div class="metric-value">{mae:.2f}</div></div>""",
             unsafe_allow_html=True,
         )
     with top_col3:
@@ -270,6 +306,23 @@ if result["performance"] is not None:
             <div class="metric-value">{r2:.3f}</div></div>""",
             unsafe_allow_html=True,
         )
+else:
+    with top_col2:
+        st.markdown(
+            """<div class="metric-card"><div class="metric-label">Model Performance</div>
+            <div style="color:#4a5568; font-size:13px; margin-top:8px;">No trained model supplied for this data</div></div>""",
+            unsafe_allow_html=True,
+        )
+    with top_col3:
+        concept_text = "Not checked (no target column)"
+        if result.concept_drift is not None:
+            concept_text = result.concept_drift["verdict"]
+        st.markdown(
+            f"""<div class="metric-card"><div class="metric-label">Concept Drift</div>
+            <div style="color:#eef2f6; font-size:15px; margin-top:8px; font-weight:600;">{concept_text}</div></div>""",
+            unsafe_allow_html=True,
+        )
+
 with top_col4:
     st.markdown(
         f"""<div class="metric-card"><div class="metric-label">Rows Compared</div>
@@ -294,16 +347,31 @@ with tab_overview:
     st.markdown(
         f"""
         <div style="background:#10151c; border:1px solid #1f2733; border-radius:10px; padding:18px 22px; color:#d1d5db; font-size:15px; line-height:1.7;">
-        {result['summary']}
+        {result.summary}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    if result.concept_drift is not None:
+        st.write("")
+        st.markdown("#### Concept Drift Check")
+        verdict_color = "#ff5c5c" if "DETECTED" in result.concept_drift["verdict"] else "#00e08c"
+        flagged = ", ".join(result.concept_drift["flagged_features"]) or "none"
+        st.markdown(
+            f"""
+            <div style="background:#10151c; border:1px solid #1f2733; border-radius:10px; padding:14px 18px; color:#d1d5db; font-size:14px;">
+            <span style="color:{verdict_color}; font-weight:700;">{result.concept_drift['verdict']}</span><br>
+            <span style="color:#7d8a9c; font-size:13px;">Flagged features: {flagged}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.write("")
     st.markdown("#### Top Drift Drivers")
-    top3 = drift_report.sort_values("psi", ascending=False).head(3)
-    cols = st.columns(3)
+    top3 = drift_report.sort_values("psi", ascending=False).head(min(3, len(drift_report)))
+    cols = st.columns(len(top3)) if len(top3) > 0 else []
     for i, (_, row) in enumerate(top3.iterrows()):
         with cols[i]:
             verdict_color = "#ff5c5c" if "Major" in row["psi_verdict"] else ("#ffb000" if "Moderate" in row["psi_verdict"] else "#00e08c")
@@ -319,20 +387,6 @@ with tab_overview:
                 """,
                 unsafe_allow_html=True,
             )
-
-    st.write("")
-    st.markdown("#### Key Finding")
-    st.markdown(
-        """
-        <div style="background:rgba(0,146,255,0.08); border:1px solid rgba(0,146,255,0.3); border-radius:10px; padding:16px 20px; color:#c8d6e5; font-size:14px; line-height:1.6;">
-        Even during a historic 96% collapse in ridership, core trip mechanics — <b>distance</b> and <b>fare</b> —
-        remained statistically stable. The real drift signal was <b>behavioral</b>: <i>when</i> and <i>where</i>
-        people traveled shifted, while <i>how far and how much</i> they paid did not. This distinction — data
-        drift in some features but not others — is exactly what a naive "did accuracy drop?" check would miss.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 # ---------------------------------------------------------------------------
 # TAB 2: Drift Report
@@ -352,9 +406,9 @@ with tab_drift:
     st.dataframe(styled, use_container_width=True, height=280)
 
     st.caption(
-        "PSI: Population Stability Index (bank/fintech standard). "
-        "KS-statistic: max distance between cumulative distributions (0=identical, 1=disjoint). "
-        "KL-divergence: information-theoretic distance from reference to current distribution."
+        "PSI: Population Stability Index. KS-statistic: max distance between cumulative distributions "
+        "(0=identical, 1=disjoint). KL-divergence: information-theoretic distance from reference to current. "
+        "naive_zscore: a simple mean-based baseline, shown for comparison."
     )
 
     csv_bytes = drift_report.to_csv(index=False).encode("utf-8")
@@ -382,13 +436,13 @@ with tab_distributions:
         "font.size": 9,
     })
 
-    n_feat = len(available_features)
+    n_feat = len(feature_columns)
     n_cols = 3
     n_rows = (n_feat + n_cols - 1) // n_cols
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(13, 3.2 * n_rows))
     axes = axes.flatten() if n_feat > 1 else [axes]
 
-    for i, feat in enumerate(available_features):
+    for i, feat in enumerate(feature_columns):
         ax = axes[i]
         ax.hist(train_df[feat], bins=30, alpha=0.55, label="Reference", density=True, color="#0092ff")
         ax.hist(current_df[feat], bins=30, alpha=0.55, label="Current", density=True, color="#ff8a00")
@@ -403,28 +457,28 @@ with tab_distributions:
     fig.tight_layout()
     st.pyplot(fig)
 
-    st.caption("Blue = reference (training) window · Orange = current window. Colored titles indicate drift severity.")
+    st.caption("Blue = reference window · Orange = current window. Colored titles indicate drift severity.")
 
 # ---------------------------------------------------------------------------
 # TAB 4: Alert Simulation
 # ---------------------------------------------------------------------------
 with tab_alert:
     st.markdown("#### What This Would Post To Your Team's Slack")
-    st.caption("A real drift-monitoring tool doesn't just compute numbers — it has to reach an engineer. Here's the notification this run would trigger.")
+    st.caption("Sentinel can send this as a REAL Slack message via sentinel.alerting.send_slack_alert() -- shown here as a preview.")
 
     now_str = datetime.now().strftime("%I:%M %p")
     alert_class = "ok" if status == "OK" else ("watch" if status == "WATCH" else "")
     icon = "✅" if status == "OK" else ("⚠️" if status == "WATCH" else "🚨")
 
-    top_features = drift_report[drift_report["psi"] >= 0.10]["feature"].tolist()
+    drifted_rows = drift_report[drift_report["psi"] >= 0.10]
     feature_lines = "\n".join([
         f"  • {row['feature']}: PSI {row['psi']:.2f} ({row['ref_mean']:.2f} → {row['cur_mean']:.2f})"
-        for _, row in drift_report[drift_report["psi"] >= 0.10].iterrows()
+        for _, row in drifted_rows.iterrows()
     ]) or "  • none above threshold"
 
     perf_line = ""
-    if result["performance"] is not None:
-        perf_line = f"Model MAE: {result['performance']['mae']:.2f} min · R²: {result['performance']['r2']:.3f}"
+    if result.performance is not None:
+        perf_line = f"Model MAE: {result.performance['mae']:.2f} · R²: {result.performance['r2']:.3f}"
 
     st.markdown(
         f"""
@@ -436,8 +490,8 @@ with tab_alert:
                     <span class="slack-botname">Sentinel Bot</span>
                     <span class="slack-tag">APP</span>
                     <span class="slack-time">{now_str}</span><br>
-                    {icon} <b>Drift check complete for trip-duration model</b><br>
-                    Status: <b>{status}</b> · Max PSI: {result['max_psi']:.3f} · {perf_line}
+                    {icon} <b>Drift check complete</b><br>
+                    Status: <b>{status}</b> · Max PSI: {result.max_psi:.3f} · {perf_line}
                     <div class="slack-alert-block {alert_class}">
 Drifted features (PSI ≥ 0.10):
 {feature_lines}
@@ -451,19 +505,7 @@ Recommendation: {"No action needed." if status == "OK" else ("Monitor closely; s
         unsafe_allow_html=True,
     )
 
-    st.write("")
-    st.markdown(
-        """
-        <div style="color:#7d8a9c; font-size:13px;">
-        In a production setup, <code style="color:#0092ff;">monitor.py</code> would run on a schedule
-        (e.g. a daily Airflow/cron job) and post this message via a Slack webhook whenever status
-        moves to WATCH or ALERT — rather than requiring anyone to open a dashboard.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
 st.markdown(
-    '<div class="footer-note">Sentinel · Built to demonstrate PSI / KS-test / KL-divergence drift detection on real NYC TLC trip data</div>',
+    '<div class="footer-note">Sentinel · Built on the generic sentinel/ package · Works on any tabular dataset</div>',
     unsafe_allow_html=True,
 )
