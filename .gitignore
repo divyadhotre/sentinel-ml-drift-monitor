@@ -6,12 +6,10 @@ venv/
 *.egg-info/
 .DS_Store
 
-# Raw data files (large, download via README instructions instead)
+# Raw parquet files stay excluded (large, download via README instructions instead)
 data/raw/*.parquet
-data/raw/*.csv
-data/processed/*.csv
-data/processed/*.pkl
 
-# Keep folder structure visible in git even though contents are ignored
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+# Processed sample data + trained model ARE committed -- needed for the hosted demo to work
+!data/processed/taxi_training_era.csv
+!data/processed/taxi_current_era.csv
+!data/processed/baseline_model.pkl
