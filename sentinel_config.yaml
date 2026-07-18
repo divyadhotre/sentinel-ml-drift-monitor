@@ -1,0 +1,6 @@
+jobs:
+  - name: taxi-duration-model
+    reference: data/processed/taxi_training_era.csv
+    current: data/processed/taxi_current_era.csv
+    features: [trip_distance, passenger_count, PULocationID, DOLocationID, fare_amount, hour_of_day, is_weekend]
+    target: trip_duration_min
