@@ -1,10 +1,16 @@
 # Sentinel — Statistical ML Model Drift Monitor
-
 [![Tests](https://github.com/divyadhotre/sentinel-ml-drift-monitor/actions/workflows/tests.yml/badge.svg)](https://github.com/divyadhotre/sentinel-ml-drift-monitor/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://sentinel-ml-drift-monitor-rl9w2flgrtxpjf4qdndu99.streamlit.app)
+
 
 **Every deployed ML model eventually sees data that no longer looks like what it was trained on — and nothing tells you when that happens. Sentinel does.**
+
+**[Try the live demo →](https://sentinel-ml-drift-monitor-rl9w2flgrtxpjf4qdndu99.streamlit.app)** — upload your own data and see it work instantly, no setup required.
+
+![Scan to open live demo](reports/screenshots/demo_qr.png)
+
 
 Point it at any two tabular datasets — your model's training data and today's data — and it tells you: has the input data drifted, is it the kind of drift that actually matters, has the underlying relationship between inputs and outcomes changed, and should you retrain.
 
