@@ -9,3 +9,5 @@ shap
 streamlit
 requests
 pyyaml
+pytest-cov
+coverage-badge

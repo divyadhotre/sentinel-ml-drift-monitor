@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://sentinel-ml-drift-monitor-rl9w2flgrtxpjf4qdndu99.streamlit.app)
+[![Coverage](coverage.svg)](coverage.svg)
 
 
 **Every deployed ML model eventually sees data that no longer looks like what it was trained on — and nothing tells you when that happens. Sentinel does.**
@@ -206,6 +207,7 @@ Python, pandas, NumPy, scikit-learn, SciPy, Matplotlib, Streamlit, Jupyter, pyte
 
 **What Sentinel can monitor:** any numeric feature space, including precomputed embeddings (e.g. sentence-transformer text embeddings or CNN image feature vectors) — Sentinel does not generate embeddings itself, it detects drift in whatever numeric representation you provide it.
 
+> **Windows note:** if `pip`, `pytest`, or `sentinel` commands are blocked by an Application Control policy, prefix them with `python -m` instead (e.g., `python -m pip install ...`, `python -m pytest ...`) — same behavior, routed through the trusted Python interpreter instead of a generated `.exe` launcher.
 ---
 
 ## Installation & Usage

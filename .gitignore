@@ -5,6 +5,9 @@ venv/
 .venv/
 *.egg-info/
 .DS_Store
+.coverage
+coverage.xml
+htmlcov/
 
 # Raw parquet files stay excluded (large, download via README instructions instead)
 data/raw/*.parquet
