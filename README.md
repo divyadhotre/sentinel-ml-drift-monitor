@@ -10,6 +10,9 @@
 
 **[Try the live demo →](https://sentinel-ml-drift-monitor-rl9w2flgrtxpjf4qdndu99.streamlit.app)** — upload your own data and see it work instantly, no setup required.
 
+
+*(Free-tier hosting sleeps after inactivity — if you see a "Zzzz" screen, just click "Yes, get this app back up!" and wait ~30 seconds.)*
+
 ![Scan to open live demo](reports/screenshots/demo_qr.png)
 
 
