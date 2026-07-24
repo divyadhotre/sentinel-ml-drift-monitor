@@ -15,6 +15,7 @@ from . import alerting
 from . import rolling
 from . import config
 from . import batch
+from . import baseline
 
-__all__ = ["SentinelMonitor", "SentinelResult", "metrics", "concept_drift", "performance", "alerting"]
+__all__ = ["SentinelMonitor", "SentinelResult", "metrics", "concept_drift", "performance", "alerting","baseline"]
 __version__ = "0.1.0"
