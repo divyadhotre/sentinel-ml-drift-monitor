@@ -28,6 +28,7 @@ import pandas as pd
 import streamlit as st
 
 from sentinel import SentinelMonitor
+from sentinel.baseline import train_quick_baseline, evaluate_quick_baseline
 
 st.set_page_config(
     page_title="Sentinel · ML Drift Monitor",
@@ -333,6 +334,76 @@ with top_col4:
 st.write("")
 
 # ============================================================================
+# QUICK BASELINE MODEL — opt-in only, never runs automatically
+# ============================================================================
+if model is None and target_column is not None:
+    st.markdown(
+        """
+        <div style="background:#10151c; border:1px solid #1f2733; border-radius:10px; padding:16px 20px; margin-bottom:12px;">
+        <span style="color:#eef2f6; font-weight:700; font-size:15px;">Quick Baseline Model</span>
+        <span style="background:#2c2f34; color:#ffb000; font-size:10px; padding:2px 8px; border-radius:4px; margin-left:8px; font-weight:700;">NOT AUTOML</span><br>
+        <span style="color:#7d8a9c; font-size:13px;">
+        Trains a single Random Forest, default settings, no tuning — a fast sanity-check of drift's
+        real performance impact, not a validated production model. ID-like columns are auto-excluded.
+        </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    current_data_signature = (train_df.shape, current_df.shape, tuple(feature_columns), target_column)
+    if st.session_state.get("baseline_data_signature") != current_data_signature:
+        st.session_state.pop("baseline_result", None)
+        st.session_state["baseline_data_signature"] = current_data_signature
+
+    if st.button("Train Quick Baseline Model"):
+        with st.spinner("Training a quick baseline model on the reference data..."):
+            baseline_result = train_quick_baseline(train_df, feature_columns, target_column)
+        st.session_state["baseline_result"] = baseline_result
+
+    if "baseline_result" in st.session_state:
+        baseline_result = st.session_state["baseline_result"]
+
+        if "error" in baseline_result:
+            st.error(baseline_result["error"])
+        else:
+            for warning_msg in baseline_result["warnings"]:
+                st.warning(warning_msg)
+
+            eval_result = evaluate_quick_baseline(baseline_result, current_df, target_column)
+
+            if "error" in eval_result:
+                st.error(eval_result["error"])
+            else:
+                st.markdown(
+                    '<span style="background:rgba(255,176,0,0.15); color:#ffb000; font-size:11px; padding:3px 10px; border-radius:10px; font-weight:700;">⚠ QUICK BASELINE — NOT A VALIDATED MODEL</span>',
+                    unsafe_allow_html=True,
+                )
+                baseline_metrics = baseline_result["baseline_holdout_metrics"]
+                st.caption(f"Trained on {baseline_result['n_rows_train']:,} rows, held out {baseline_result['n_rows_holdout']:,} rows for an honest same-era baseline.")
+
+                bcol1, bcol2 = st.columns(2)
+                if eval_result["problem_type"] == "regression":
+                    with bcol1:
+                        st.metric("Baseline MAE (same-era holdout)", f"{baseline_metrics['mae']:.3f}")
+                        st.metric("Current MAE (drifted data)", f"{eval_result['mae']:.3f}",
+                                  delta=f"{eval_result['mae'] - baseline_metrics['mae']:+.3f}", delta_color="inverse")
+                    with bcol2:
+                        st.metric("Baseline R² (same-era holdout)", f"{baseline_metrics['r2']:.3f}")
+                        st.metric("Current R² (drifted data)", f"{eval_result['r2']:.3f}",
+                                  delta=f"{eval_result['r2'] - baseline_metrics['r2']:+.3f}")
+                else:
+                    with bcol1:
+                        st.metric("Baseline Accuracy (same-era holdout)", f"{baseline_metrics['accuracy']:.3f}")
+                        st.metric("Current Accuracy (drifted data)", f"{eval_result['accuracy']:.3f}",
+                                  delta=f"{eval_result['accuracy'] - baseline_metrics['accuracy']:+.3f}")
+                    with bcol2:
+                        st.metric("Baseline F1 (same-era holdout)", f"{baseline_metrics['f1']:.3f}")
+                        st.metric("Current F1 (drifted data)", f"{eval_result['f1']:.3f}",
+                                  delta=f"{eval_result['f1'] - baseline_metrics['f1']:+.3f}")
+    st.write("")
+
+# ============================================================================
 # TABS
 # ============================================================================
 tab_overview, tab_drift, tab_distributions, tab_alert = st.tabs(
@@ -402,8 +473,12 @@ with tab_drift:
         else:
             return ["background-color: rgba(0,224,140,0.08); color: #b3f0d9"] * len(row)
 
+  
     styled = drift_report.style.apply(highlight_verdict, axis=1)
-    st.dataframe(styled, use_container_width=True, height=280)
+    st.markdown(
+        styled.to_html(),
+        unsafe_allow_html=True,
+    )
 
     st.caption(
         "PSI: Population Stability Index. KS-statistic: max distance between cumulative distributions "
