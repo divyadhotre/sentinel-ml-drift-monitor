@@ -8,6 +8,7 @@ venv/
 .coverage
 coverage.xml
 htmlcov/
+.env
 
 # Raw parquet files stay excluded (large, download via README instructions instead)
 data/raw/*.parquet
